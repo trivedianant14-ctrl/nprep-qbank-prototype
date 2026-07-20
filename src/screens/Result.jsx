@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { QUESTIONS, TOPICS } from '../data'
+import { QUESTIONS, TOPPER, COHORT, computePercentile } from '../data'
 
 const P='#534AB7',PL='#EEEDFE',PB='#AFA9EC',PD='#3C3489'
 const T1='#1a1a2e',T2='#5a5a78',T3='#9898b0',BD='#e8e8f2',BG2='#f5f5fb'
@@ -7,6 +7,26 @@ const GREEN='#3B6D11',GREEN_BG='#EAF3DE',GREEN_BD='#97C459'
 const RED='#A32D2D',RED_BG='#FCEBEB',RED_BD='#F09595'
 
 const RATING_LABELS = ['', 'Poor', 'Okay', 'Good', 'Great', 'Excellent']
+
+const DIFFICULTY_ORDER = ['easy', 'moderate', 'difficult']
+const DIFFICULTY_LABELS = { easy: 'Easy', moderate: 'Moderate', difficult: 'Difficult' }
+
+function formatDuration(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return m === 0 ? `${s}s` : `${m}m ${s}s`
+}
+
+// This prototype has no backend, so per-question elapsed time isn't tracked live.
+// Estimate a plausible time from the question id + outcome, deterministic so the
+// same attempt always renders the same numbers, capped at that attempt's timer setting.
+function estimateQuestionTime(qId, outcome, maxTime) {
+  if (outcome === 'missed') return maxTime
+  const jitter = (qId * 13) % 9 // 0..8, deterministic per question
+  const base = outcome === 'correct' ? 0.38 : 0.68
+  const frac = Math.min(0.95, base + jitter / 40)
+  return Math.max(4, Math.round(maxTime * frac))
+}
 
 function SemiGauge({ pct }) {
   const r = 108, cx = 150, cy = 130
@@ -31,18 +51,23 @@ function SemiGauge({ pct }) {
   )
 }
 
-export default function Result({ navigate, answers, mode, viewSolution, setShowReattemptConfirm, showReattemptConfirm, handleReattempt, isReattempt, pyqBankIds = [], viewPYQBank }) {
-  const [showAllWrong, setShowAllWrong] = useState(false)
+export default function Result({ navigate, answers, setAnswers, mode, viewSolution, setShowReattemptConfirm, showReattemptConfirm, handleReattempt, sessions = [] }) {
   const [rating, setRating] = useState(0)
   const [feedbackNote, setFeedbackNote] = useState('')
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [animPct, setAnimPct] = useState(0)
+  const [attemptIdx, setAttemptIdx] = useState(0)
 
-  const correct   = QUESTIONS.filter(q => answers[q.id] === q.correct).length
-  const incorrect = QUESTIONS.filter(q => answers[q.id] && answers[q.id] !== q.correct && answers[q.id] !== 'timeout').length
-  const skipped   = QUESTIONS.filter(q => answers[q.id] === 'timeout').length
+  // Every completed attempt for this chapter — the dropdown below switches between them.
+  const attempts = sessions.filter(s => s.chapterId === 1)
+  const selected = attempts[attemptIdx] || attempts[attempts.length - 1]
+    || { answers, correct: 0, total: QUESTIONS.length, accuracy: 0, timerPerQ: 60, attemptNumber: 1, completedAt: Date.now() }
+
   const total     = QUESTIONS.length
+  const correct   = QUESTIONS.filter(q => selected.answers[q.id] === q.correct).length
+  const incorrect = QUESTIONS.filter(q => selected.answers[q.id] && selected.answers[q.id] !== q.correct && selected.answers[q.id] !== 'timeout').length
+  const skipped   = QUESTIONS.filter(q => selected.answers[q.id] === 'timeout').length
   const accuracy  = total > 0 ? Math.round((correct / total) * 100) : 0
 
   useEffect(() => {
@@ -62,27 +87,43 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
   const msg = getMsg()
 
   const wrongQs = QUESTIONS.filter(q => {
-    const a = answers[q.id]
+    const a = selected.answers[q.id]
     return !a || a === 'timeout' || (a && a !== q.correct)
   })
-  const missedPYQs = wrongQs.filter(q => q.isPYQ)
-  const visibleWrongQs = showAllWrong ? wrongQs : wrongQs.slice(0, 3)
 
-  const topicData = TOPICS.map(t => {
-    const topicQs = QUESTIONS.filter(q => q.topicId === t.id)
-    if (topicQs.length === 0) return null
-    const topicCorrect  = topicQs.filter(q => answers[q.id] === q.correct).length
-    const topicWrong    = topicQs.filter(q => answers[q.id] && answers[q.id] !== q.correct && answers[q.id] !== 'timeout').length
-    const topicSkipped  = topicQs.filter(q => !answers[q.id] || answers[q.id] === 'timeout').length
-    const topicAttempted = topicQs.filter(q => answers[q.id] && answers[q.id] !== 'timeout').length
-    const topicAcc = topicAttempted > 0 ? Math.round((topicCorrect / topicAttempted) * 100) : 0
-    const pyqCount = topicQs.filter(q => q.isPYQ).length
-    return { ...t, correct: topicCorrect, wrong: topicWrong, skipped: topicSkipped, attempted: topicAttempted, total: topicQs.length, acc: topicAcc, pyqCount }
+  // Simulated per-question time, capped at the timer setting used for this attempt
+  const maxTime = selected.timerPerQ || 60
+  const correctTime = QUESTIONS.filter(q => selected.answers[q.id] === q.correct)
+    .reduce((sum, q) => sum + estimateQuestionTime(q.id, 'correct', maxTime), 0)
+  const incorrectTime = QUESTIONS.filter(q => selected.answers[q.id] && selected.answers[q.id] !== q.correct && selected.answers[q.id] !== 'timeout')
+    .reduce((sum, q) => sum + estimateQuestionTime(q.id, 'incorrect', maxTime), 0)
+  const missedTime = skipped * maxTime
+  const totalTimeSec = correctTime + incorrectTime + missedTime
+  const avgCorrectTime = correct > 0 ? Math.round(correctTime / correct) : 0
+  const avgIncorrectTime = incorrect > 0 ? Math.round(incorrectTime / incorrect) : 0
+  const avgMissedTime = skipped > 0 ? Math.round(missedTime / skipped) : 0
+
+  const percentile = computePercentile(accuracy)
+
+  const difficultyData = DIFFICULTY_ORDER.map(level => {
+    const qs = QUESTIONS.filter(q => q.difficulty === level)
+    if (qs.length === 0) return null
+    const dCorrect = qs.filter(q => selected.answers[q.id] === q.correct).length
+    const dAttempted = qs.filter(q => selected.answers[q.id] && selected.answers[q.id] !== 'timeout').length
+    const dAcc = dAttempted > 0 ? Math.round((dCorrect / dAttempted) * 100) : 0
+    return { level, label: DIFFICULTY_LABELS[level], total: qs.length, correct: dCorrect, attempted: dAttempted, acc: dAcc }
   }).filter(Boolean)
 
-  const weakTopics = topicData.filter(t => t.wrong > 0 || t.skipped > 0).sort((a, b) => (b.wrong - a.wrong) || (b.skipped - a.skipped))
-  const avgTime = 48
-  const totalTime = `${Math.floor((avgTime * total) / 60)}m ${(avgTime * total) % 60}s`
+  const topper = TOPPER.stats
+  const comparisonRows = [
+    { label: 'Score', you: correct, topper: topper.correct, max: total, fmt: v => `${v}/${total}` },
+    { label: 'Correct', you: correct, topper: topper.correct, max: total, fmt: v => v },
+    { label: 'Incorrect', you: incorrect, topper: topper.incorrect, max: total, fmt: v => v },
+    { label: 'Accuracy', you: accuracy, topper: topper.accuracy, max: 100, fmt: v => `${v}%` },
+    { label: 'Time taken', you: totalTimeSec, topper: topper.timeTakenSec, max: Math.max(totalTimeSec, topper.timeTakenSec) || 1, fmt: v => formatDuration(v) },
+  ]
+
+  const viewSelectedSolutions = () => { setAnswers(selected.answers); viewSolution() }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'white' }}>
@@ -116,10 +157,10 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
             Anatomical Terms · Applied Anatomy
           </div>
 
-          {/* Reattempt notice */}
-          {isReattempt && (
+          {/* Attempt indicator */}
+          {attempts.length > 1 && (
             <div style={{ background: '#FFF8E7', border: '1px solid #FFE082', borderRadius: 10, padding: '8px 14px', marginBottom: 16, fontSize: 12, color: '#5D4037', textAlign: 'center' }}>
-              <span style={{ fontWeight: 700 }}>Reattempt</span> · Only your first attempt score is saved for analysis.
+              <span style={{ fontWeight: 700 }}>Attempt {selected.attemptNumber ?? attemptIdx + 1}</span> of {attempts.length} · switch attempts from the dropdown below
             </div>
           )}
 
@@ -186,140 +227,118 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
         {/* ── PERFORMANCE CONTENT ── */}
         <div style={{ padding: '0 16px' }}>
 
-          {/* Score summary card */}
-          <div style={{ background: 'white', border: `1px solid ${BD}`, borderLeft: `4px solid ${accuracy >= 70 ? GREEN : accuracy >= 50 ? P : RED}`, borderRadius: 14, padding: '14px', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: T1, lineHeight: 1.5, marginBottom: 8 }}>
-              {accuracy >= 80 ? "Excellent work — you're well-prepared on this chapter!"
-                : accuracy >= 60 ? "Good effort! A few more practice sessions and you'll nail it."
-                : accuracy >= 40 ? "You're building up. Focus on the weak topics below and retry."
-                : "Don't worry — use the explanations to build your foundation step by step."}
+          {/* Attempt selector */}
+          {attempts.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T2, flexShrink: 0 }}>Viewing:</span>
+              <select
+                value={attemptIdx}
+                onChange={e => setAttemptIdx(Number(e.target.value))}
+                style={{ flex: 1, fontSize: 12, fontWeight: 600, color: PD, background: PL, border: `1.5px solid ${PB}`, borderRadius: 10, padding: '8px 10px', outline: 'none' }}
+              >
+                {attempts.map((a, i) => (
+                  <option key={a.id} value={i}>
+                    Attempt {a.attemptNumber ?? i + 1}{i === 0 ? ' (first completed)' : ''} · {new Date(a.completedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {a.accuracy}%
+                  </option>
+                ))}
+              </select>
             </div>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: T2 }}>
-              <span><span style={{ fontWeight: 700, color: GREEN }}>{correct}</span> correct</span>
-              <span><span style={{ fontWeight: 700, color: RED }}>{incorrect}</span> wrong</span>
-              <span><span style={{ fontWeight: 700, color: '#B45309' }}>{skipped}</span> skipped</span>
+          )}
+
+          {/* Stats table */}
+          <div style={{ background: 'white', border: `1px solid ${BD}`, borderRadius: 14, padding: '4px 14px', marginBottom: 12 }}>
+            {[
+              ['Total accuracy', `${accuracy}%`],
+              ['Total correct', correct],
+              ['Total incorrect', incorrect],
+              ['Skipped (ran out of time)', skipped],
+              ['Total time taken', formatDuration(totalTimeSec)],
+            ].map(([label, value], i) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: i > 0 ? `1px solid ${BD}` : 'none' }}>
+                <span style={{ fontSize: 12, color: T2 }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T1 }}>{value}</span>
+              </div>
+            ))}
+
+            {/* Time spent breakdown */}
+            <div style={{ padding: '10px 0', borderTop: `1px solid ${BD}` }}>
+              <div style={{ fontSize: 12, color: T2, marginBottom: 8 }}>Time spent (avg / question)</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1, textAlign: 'center', background: GREEN_BG, border: `1px solid ${GREEN_BD}`, borderRadius: 10, padding: '8px 4px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>{correct > 0 ? `${avgCorrectTime}s` : '—'}</div>
+                  <div style={{ fontSize: 9, color: GREEN, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>Correct</div>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center', background: RED_BG, border: `1px solid ${RED_BD}`, borderRadius: 10, padding: '8px 4px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: RED }}>{incorrect > 0 ? `${avgIncorrectTime}s` : '—'}</div>
+                  <div style={{ fontSize: 9, color: RED, opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>Incorrect</div>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center', background: '#FFF8E7', border: '1px solid #FFD54F', borderRadius: 10, padding: '8px 4px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#B45309' }}>{skipped > 0 ? `${avgMissedTime}s` : '—'}</div>
+                  <div style={{ fontSize: 9, color: '#B45309', opacity: 0.8, marginTop: 2, textTransform: 'uppercase' }}>Missed</div>
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 14, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BD}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T3} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-                <span style={{ fontSize: 11, color: T3 }}>{avgTime}s avg / question</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T3} strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span style={{ fontSize: 11, color: T3 }}>Total: {totalTime}</span>
-              </div>
+
+            {/* Percentile */}
+            <div style={{ padding: '10px 0', borderTop: `1px solid ${BD}` }}>
+              {percentile !== null ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: T2 }}>Percentile</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: P }}>{percentile}th percentile · top {Math.max(1, 100 - percentile)}%</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: T3, lineHeight: 1.5 }}>
+                  Percentile unlocks once 100+ students complete this chapter (currently {COHORT.completed}).
+                </div>
+              )}
             </div>
           </div>
 
-          {/* PYQ bank — clickable, untimed storage of every PYQ attempted across all sessions */}
-          {pyqBankIds.length > 0 && (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => viewPYQBank()}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') viewPYQBank() }}
-              style={{ background: 'white', border: `1px solid ${BD}`, borderLeft: `3px solid ${missedPYQs.length > 0 ? '#E6A817' : GREEN_BD}`, borderRadius: 14, padding: '13px 14px', marginBottom: 12, cursor: 'pointer' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T1, marginBottom: 4 }}>
-                  {missedPYQs.length > 0
-                    ? `${missedPYQs.length} Previous Year Question${missedPYQs.length > 1 ? 's' : ''} Missed`
-                    : `${pyqBankIds.length} Previous Year Question${pyqBankIds.length > 1 ? 's' : ''} Attempted`}
-                </div>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T3} strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 2 }}><path d="M9 18l6-6-6-6"/></svg>
-              </div>
-              <div style={{ fontSize: 12, color: T3, lineHeight: 1.5, marginBottom: 10 }}>
-                {missedPYQs.length > 0 ? 'These appeared in real exams — prioritise reviewing them. ' : 'Great work on these — revisit anytime. '}
-                Tap to browse all {pyqBankIds.length} PYQ{pyqBankIds.length > 1 ? 's' : ''} you've attempted, untimed.
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {QUESTIONS.filter(q => pyqBankIds.includes(q.id)).map(q => {
-                  const isMissed = missedPYQs.includes(q)
-                  return (
-                    <div
-                      key={q.id}
-                      onClick={e => { e.stopPropagation(); viewPYQBank(q.id) }}
-                      style={{ background: isMissed ? BG2 : GREEN_BG, border: `1px solid ${isMissed ? BD : GREEN_BD}`, borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: isMissed ? T2 : GREEN, cursor: 'pointer' }}
-                    >
-                      Q{QUESTIONS.indexOf(q) + 1} · {q.pyqExam} {q.pyqYear}
+          {/* Comparison chart — you vs topper */}
+          <div style={{ border: `1px solid ${BD}`, borderRadius: 14, padding: '13px 14px', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T1, marginBottom: 2 }}>You vs {TOPPER.rank}</div>
+            <div style={{ fontSize: 11, color: T3, marginBottom: 12 }}>{TOPPER.name} · {TOPPER.exam}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {comparisonRows.map(row => (
+                <div key={row.label}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T2, marginBottom: 4 }}>{row.label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontSize: 9, color: T3, width: 36, flexShrink: 0 }}>You</span>
+                    <div style={{ flex: 1, height: 7, background: BG2, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${row.max > 0 ? Math.min(100, (row.you / row.max) * 100) : 0}%`, background: P, borderRadius: 4 }} />
                     </div>
-                  )
-                })}
-              </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: T1, width: 48, textAlign: 'right', flexShrink: 0 }}>{row.fmt(row.you)}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 9, color: T3, width: 36, flexShrink: 0 }}>Topper</span>
+                    <div style={{ flex: 1, height: 7, background: BG2, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${row.max > 0 ? Math.min(100, (row.topper / row.max) * 100) : 0}%`, background: '#E6A817', borderRadius: 4 }} />
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: T1, width: 48, textAlign: 'right', flexShrink: 0 }}>{row.fmt(row.topper)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
 
-          {/* Study focus */}
-          {weakTopics.length > 0 && (
+          {/* Difficulty-wise analysis */}
+          {difficultyData.length > 0 && (
             <div style={{ border: `1px solid ${BD}`, borderRadius: 14, padding: '13px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: T1, marginBottom: 3 }}>Study Focus</div>
-              <div style={{ fontSize: 12, color: T3, marginBottom: 10 }}>Topics where you need more practice</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T1, marginBottom: 3 }}>Difficulty-wise Analysis</div>
+              <div style={{ fontSize: 12, color: T3, marginBottom: 10 }}>How you performed across question difficulty</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {weakTopics.map(t => (
-                  <div key={t.id} style={{ background: BG2, border: `1px solid ${BD}`, borderRadius: 10, padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: T1 }}>{t.name}</div>
-                        <div style={{ fontSize: 11, color: T3, marginTop: 2 }}>
-                          {t.wrong > 0 && `${t.wrong} wrong`}{t.wrong > 0 && t.skipped > 0 && ' · '}{t.skipped > 0 && `${t.skipped} skipped`}{t.pyqCount > 0 && ` · ${t.pyqCount} PYQ`}
-                        </div>
-                      </div>
-                      <button onClick={viewSolution} style={{ background: 'white', border: `1.5px solid ${P}`, borderRadius: 8, padding: '5px 12px', fontSize: 11, fontWeight: 700, color: P, cursor: 'pointer', flexShrink: 0, marginLeft: 10 }}>Review</button>
+                {difficultyData.map(d => (
+                  <div key={d.level} style={{ background: BG2, border: `1px solid ${BD}`, borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T1 }}>{d.label}</span>
+                      <span style={{ fontSize: 11, color: T3 }}>{d.attempted > 0 ? `${d.acc}% · ${d.correct}/${d.total}` : `${d.total} question${d.total > 1 ? 's' : ''}`}</span>
                     </div>
                     <div style={{ height: 3, background: BD, borderRadius: 2 }}>
-                      <div style={{ height: 3, width: `${t.attempted > 0 ? t.acc : 0}%`, background: P, borderRadius: 2, transition: 'width 0.4s ease' }} />
+                      <div style={{ height: 3, width: `${d.attempted > 0 ? d.acc : 0}%`, background: P, borderRadius: 2, transition: 'width 0.4s ease' }} />
                     </div>
-                    <div style={{ fontSize: 10, color: T3, marginTop: 4 }}>{t.attempted > 0 ? `${t.acc}% accuracy · ${t.correct}/${t.total} correct` : 'Not attempted'}</div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Review questions */}
-          {wrongQs.length > 0 && (
-            <div style={{ border: `1px solid ${BD}`, borderRadius: 14, padding: '13px 14px', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T1 }}>Review These Questions</div>
-                <div style={{ fontSize: 11, color: T3 }}>{wrongQs.length} to review</div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {visibleWrongQs.map(q => {
-                  const a = answers[q.id]
-                  const isSkip = !a || a === 'timeout'
-                  const qIdx = QUESTIONS.indexOf(q)
-                  return (
-                    <div key={q.id} style={{ background: BG2, border: `1px solid ${BD}`, borderRadius: 10, overflow: 'hidden' }}>
-                      <button onClick={viewSolution} style={{ padding: '10px 12px', cursor: 'pointer', textAlign: 'left', display: 'block', width: '100%', background: 'transparent', border: 'none' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'white', border: `1.5px solid ${BD}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: T2 }}>{qIdx + 1}</span>
-                            </div>
-                            <span style={{ fontSize: 10, fontWeight: 600, color: T2 }}>{isSkip ? 'Skipped' : 'Wrong answer'}</span>
-                            {q.isPYQ && <span style={{ fontSize: 9, background: 'white', border: `1px solid ${BD}`, color: T3, borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>PYQ</span>}
-                          </div>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T3} strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
-                        </div>
-                        <div style={{ fontSize: 12, color: T1, lineHeight: 1.45, marginBottom: isSkip ? 0 : 6 }}>
-                          {q.text.slice(0, 85)}{q.text.length > 85 ? '…' : ''}
-                        </div>
-                        {!isSkip && (
-                          <div style={{ display: 'flex', gap: 10 }}>
-                            <span style={{ fontSize: 11, color: RED, fontWeight: 500 }}>✗ You: {a?.toUpperCase()}</span>
-                            <span style={{ fontSize: 11, color: GREEN, fontWeight: 500 }}>✓ Correct: {q.correct?.toUpperCase()}</span>
-                          </div>
-                        )}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-              {wrongQs.length > 3 && (
-                <button onClick={() => setShowAllWrong(v => !v)} style={{ width: '100%', background: 'none', border: 'none', color: P, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 8, padding: '6px 0' }}>
-                  {showAllWrong ? 'Show less ↑' : `Show ${wrongQs.length - 3} more ↓`}
-                </button>
-              )}
             </div>
           )}
 
@@ -356,7 +375,7 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
       {/* Fixed CTAs */}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'white', borderTop: `1px solid ${BD}`, padding: '12px 16px', display: 'flex', gap: 10 }}>
         <button onClick={() => setShowReattemptConfirm(true)} className="btn-outline" style={{ flex: 1 }}>Try Again</button>
-        <button onClick={viewSolution} className="btn-primary" style={{ flex: 2 }}>View Solutions →</button>
+        <button onClick={viewSelectedSolutions} className="btn-primary" style={{ flex: 2 }}>View Solutions →</button>
       </div>
 
       {/* Re-attempt mode selector */}
@@ -375,7 +394,7 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: '#7a5c00', background: '#FFF8E1', border: '1px solid #FFE082', borderRadius: 8, padding: '8px 12px', marginBottom: 16, lineHeight: 1.5 }}>
-                  ⚠️ Only your <strong>first attempt</strong> scores are saved for analysis.
+                  ⚠️ Every attempt is saved — switch between them anytime from the analysis dropdown.
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setShowReattemptConfirm(false)} className="btn-outline" style={{ flex: 1 }}>Back</button>
@@ -418,7 +437,7 @@ export default function Result({ navigate, answers, mode, viewSolution, setShowR
                 </div>
 
                 <div style={{ fontSize: 12, color: '#7a5c00', background: '#FFF8E1', border: '1px solid #FFE082', borderRadius: 8, padding: '8px 12px', marginBottom: 14, lineHeight: 1.5 }}>
-                  ⚠️ Only your <strong>first attempt</strong> scores are saved for analysis.
+                  ⚠️ Every attempt is saved — switch between them anytime from the analysis dropdown.
                 </div>
 
                 <button onClick={() => setShowReattemptConfirm(false)} className="btn-outline" style={{ width: '100%' }}>Cancel</button>

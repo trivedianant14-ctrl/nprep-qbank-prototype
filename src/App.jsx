@@ -113,24 +113,22 @@ function NprepPrototype() {
     const correct = QUESTIONS.filter(q => answers[q.id] === q.correct).length
     const total = QUESTIONS.length
     const accuracy = Math.round((correct / total) * 100)
-    const hasFirstAttempt = sessions.some(s => s.chapterId === 1)
-    if (!hasFirstAttempt) {
-      setSessions(prev => [...prev, {
-        id: Date.now(),
-        chapterId: 1,
-        chapterName: 'Anatomical Terms',
-        subjectName: 'Applied Anatomy',
-        mode,
-        answers: { ...answers },
-        correct,
-        total,
-        accuracy,
-        completedAt: Date.now(),
-      }])
-      setIsReattempt(false)
-    } else {
-      setIsReattempt(true)
-    }
+    const priorAttempts = sessions.filter(s => s.chapterId === 1).length
+    setSessions(prev => [...prev, {
+      id: Date.now(),
+      chapterId: 1,
+      chapterName: 'Anatomical Terms',
+      subjectName: 'Applied Anatomy',
+      attemptNumber: priorAttempts + 1,
+      mode,
+      timerPerQ,
+      answers: { ...answers },
+      correct,
+      total,
+      accuracy,
+      completedAt: Date.now(),
+    }])
+    setIsReattempt(priorAttempts > 0)
     goTo('result')
   }
 

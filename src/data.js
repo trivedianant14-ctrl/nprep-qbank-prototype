@@ -27,11 +27,43 @@ export const TOPICS = [
   { id: 4, name: 'Body Cavities', qs: 4, pyqs: 0 },
 ]
 
+// Deterministic pseudo-random generator (mulberry32) — used to simulate a stable
+// cohort score distribution without a backend. Same seed always produces the same numbers.
+function mulberry32(seed) {
+  let a = seed
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Mock cohort of students who've completed Chapter 1 (Anatomical Terms), used to
+// compute percentile. Scores cluster around a plausible mean with natural spread.
+export const COHORT = (() => {
+  const rand = mulberry32(20260713)
+  const completed = 134
+  const scores = Array.from({ length: completed }, () => {
+    // Sum of 3 uniform draws approximates a bell curve, scaled to 0-100
+    const bell = (rand() + rand() + rand()) / 3
+    return Math.max(0, Math.min(100, Math.round(bell * 70 + 15)))
+  })
+  return { completed, threshold: 100, scores }
+})()
+
+export function computePercentile(accuracy) {
+  if (COHORT.completed < COHORT.threshold) return null
+  const below = COHORT.scores.filter(s => s < accuracy).length
+  return Math.round((below / COHORT.scores.length) * 100)
+}
+
 export const QUESTIONS = [
   {
     id: 1,
     topicId: 1,
     topicName: 'Body Movements & Terminology',
+    difficulty: 'easy',
     text: 'Which anatomical term describes movement of a limb away from the midline of the body?',
     options: [
       { id: 'a', text: 'Adduction', pct: 18 },
@@ -64,6 +96,7 @@ export const QUESTIONS = [
     id: 2,
     topicId: 2,
     topicName: 'Body Planes & Sections',
+    difficulty: 'moderate',
     text: 'The sagittal plane divides the body into which two sections?',
     options: [
       { id: 'a', text: 'Superior and Inferior halves', pct: 12 },
@@ -96,6 +129,7 @@ export const QUESTIONS = [
     id: 3,
     topicId: 3,
     topicName: 'Directional Terminology',
+    difficulty: 'moderate',
     text: 'In anatomical terminology, which term correctly describes the position of the heart relative to the stomach?',
     options: [
       { id: 'a', text: 'Inferior to the stomach', pct: 15 },
@@ -128,6 +162,7 @@ export const QUESTIONS = [
     id: 4,
     topicId: 1,
     topicName: 'Body Movements & Terminology',
+    difficulty: 'easy',
     text: 'In standard anatomical position, the palms of the hands face which direction?',
     options: [
       { id: 'a', text: 'Posteriorly (backward)', pct: 8 },
@@ -160,6 +195,7 @@ export const QUESTIONS = [
     id: 5,
     topicId: 3,
     topicName: 'Directional Terminology',
+    difficulty: 'easy',
     text: 'Which term refers to the front surface of the body in standard anatomical position?',
     options: [
       { id: 'a', text: 'Dorsal', pct: 18 },
@@ -192,6 +228,7 @@ export const QUESTIONS = [
     id: 6,
     topicId: 4,
     topicName: 'Body Cavities',
+    difficulty: 'moderate',
     text: 'Which body cavity houses both the heart and lungs?',
     options: [
       { id: 'a', text: 'Abdominal cavity', pct: 10 },
@@ -225,6 +262,7 @@ export const QUESTIONS = [
     id: 7,
     topicId: 5,
     topicName: 'Cardiovascular System',
+    difficulty: 'difficult',
     text: 'Based on the diagram, identify the cardiac chamber marked ★. This chamber receives oxygenated blood directly from the pulmonary veins.',
     options: [
       { id: 'a', text: 'Right Atrium (RA)', pct: 12 },
@@ -255,6 +293,8 @@ export const TOPPER = {
   exam: 'NORCET 2024',
   quote: 'I solved 1,200+ QBank questions in 90 days. Reviewing wrong answers daily was the real game-changer.',
   strategy: 'QBank every morning, videos every evening. No shortcuts.',
+  // Reference stats for this chapter, used in the result-screen comparison chart
+  stats: { correct: 7, incorrect: 0, total: 7, accuracy: 100, timeTakenSec: 210 },
 }
 
 export const VIDEO_SUBJECTS = [
