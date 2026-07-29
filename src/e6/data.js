@@ -60,8 +60,8 @@ export const CHAPTERS = [
 // have made a first attempt; under 50 the percentile is suppressed (§4.27).
 export const BLOCKS = [
   { id: 1,  chapterId: 1, ordinal: 1, name: 'Community Health Nursing', questions: 21, free: true, status: 'unattempted', cohortSize: 134 },
-  { id: 2,  chapterId: 1, ordinal: 2, name: 'Skeletal System',       questions: 21, free: true,  status: 'completed', accuracy: 72 },
-  { id: 3,  chapterId: 1, ordinal: 3, name: 'Muscular System',       questions: 21, free: false, status: 'completed', accuracy: 72 },
+  { id: 2,  chapterId: 1, ordinal: 2, name: 'Skeletal System',       questions: 21, free: true,  status: 'completed', accuracy: 73 },
+  { id: 3,  chapterId: 1, ordinal: 3, name: 'Muscular System',       questions: 21, free: false, status: 'completed', accuracy: 73 },
   // Newly published — only 12 students have a first attempt, so this block
   // exercises the percentile-suppressed layouts (Screen 23).
   { id: 4,  chapterId: 1, ordinal: 4, name: 'Nervous System',        questions: 21, free: true,  status: 'unattempted', cohortSize: 12 },

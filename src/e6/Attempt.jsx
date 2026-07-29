@@ -179,7 +179,12 @@ export default function Attempt({
 
   // ── Manual bookmark (§4.16) ──────────────────────────────────────────────
   const saved = revision.find(r => r.qId === q.id)
+  // Bumped on every toggle and re-keyed onto the icon, so the fill animation
+  // replays each time rather than only on the first save.
+  const [bookmarkBeat, setBookmarkBeat] = useState(0)
+
   function toggleBookmark() {
+    setBookmarkBeat(b => b + 1)
     if (saved) {
       uncapture(q.id)
       toast(`Removed as ${catById(saved.category).label}`)
@@ -206,8 +211,13 @@ export default function Attempt({
         <span className="ed">E6</span>
         <span className="sp" />
         {/* Filled blue when the question is saved, outline when not (§4.16). */}
-        <button onClick={toggleBookmark} style={{ color: saved ? 'var(--blue)' : 'var(--ink2)', marginRight: 10 }} aria-label="Save to Revision List">
-          <Bookmark filled={!!saved} />
+        <button
+          className={`e6-bookmark${saved ? ' on' : ''}`}
+          onClick={toggleBookmark}
+          aria-label="Save to Revision List"
+          aria-pressed={!!saved}
+        >
+          <span key={bookmarkBeat} className="beat"><Bookmark filled={!!saved} /></span>
         </button>
         {!revisiting && !answered && (
           <span className={`timer${(remaining[q.id] ?? timePerQ) <= 10 ? ' low' : ''}`}>

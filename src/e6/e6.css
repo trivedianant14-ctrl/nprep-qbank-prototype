@@ -562,6 +562,44 @@
   .e6-vs-head button { display: none; }
 }
 
+/* ── Bookmarking ─────────────────────────────────────────────────────────
+   Saving is a small commitment, so it gets a small, quick reward: the icon
+   swells and settles as it fills, and the colour eases rather than flipping.
+   ──────────────────────────────────────────────────────────────────────── */
+.e6-bookmark {
+  color: var(--ink2); margin-right: 10px;
+  display: grid; place-items: center;
+  transition: color .25s ease;
+}
+.e6-bookmark.on { color: var(--blue); }
+.e6-bookmark .beat { display: grid; place-items: center; animation: e6-bookmark-beat .42s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes e6-bookmark-beat {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.32); }
+  70%  { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
+/* The first beat on mount would fire unprompted, so suppress it. */
+.e6-bookmark .beat:first-child:last-child { animation-play-state: running; }
+
+/* The category chip crossfades when Change picks a different category. */
+.e6-catchip { transition: background .25s ease; }
+.e6-catchip > span:nth-child(2) { animation: e6-fade-in .28s ease both; }
+@keyframes e6-fade-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+/* Revision List rows settle in a short stagger so a long list does not slam
+   into place, capped so the tail of a big list is not left waiting. */
+.e6-savedrow { animation: e6-rise .34s cubic-bezier(.22, 1, .36, 1) both; }
+.e6-savedrow:nth-child(2) { animation-delay: .04s; }
+.e6-savedrow:nth-child(3) { animation-delay: .08s; }
+.e6-savedrow:nth-child(4) { animation-delay: .12s; }
+.e6-savedrow:nth-child(5) { animation-delay: .16s; }
+.e6-savedrow:nth-child(n+6) { animation-delay: .2s; }
+.e6-savedrow { transition: background .2s ease; }
+
+/* Category filter chips ease their active state. */
+.e6-catchips button { transition: border-color .22s ease, background .22s ease, color .22s ease; }
+
 @media (prefers-reduced-motion: reduce) {
   .e6 *, .e6 *::before, .e6 *::after {
     animation-duration: .01ms !important;
