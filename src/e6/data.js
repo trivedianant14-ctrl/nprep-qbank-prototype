@@ -56,12 +56,15 @@ export const CHAPTERS = [
 ]
 
 // status: unattempted | paused | completed. `accuracy` is always the FIRST
-// attempt's (§3) — reattempts never overwrite it.
+// attempt's (§3) — reattempts never overwrite it. `cohortSize` = students who
+// have made a first attempt; under 50 the percentile is suppressed (§4.27).
 export const BLOCKS = [
-  { id: 1,  chapterId: 1, ordinal: 1, name: 'Community Health Nursing', questions: 21, free: true, status: 'unattempted' },
+  { id: 1,  chapterId: 1, ordinal: 1, name: 'Community Health Nursing', questions: 21, free: true, status: 'unattempted', cohortSize: 134 },
   { id: 2,  chapterId: 1, ordinal: 2, name: 'Skeletal System',       questions: 21, free: true,  status: 'completed', accuracy: 72 },
   { id: 3,  chapterId: 1, ordinal: 3, name: 'Muscular System',       questions: 21, free: false, status: 'completed', accuracy: 72 },
-  { id: 4,  chapterId: 1, ordinal: 4, name: 'Nervous System',        questions: 21, free: false, status: 'unattempted' },
+  // Newly published — only 12 students have a first attempt, so this block
+  // exercises the percentile-suppressed layouts (Screen 23).
+  { id: 4,  chapterId: 1, ordinal: 4, name: 'Nervous System',        questions: 21, free: true,  status: 'unattempted', cohortSize: 12 },
   { id: 5,  chapterId: 2, ordinal: 1, name: 'Anatomical Terms',      questions: 21, free: false, status: 'paused', attempted: 10 },
   { id: 6,  chapterId: 2, ordinal: 2, name: 'Skeletal System',       questions: 21, free: false, status: 'unattempted' },
   { id: 7,  chapterId: 2, ordinal: 3, name: 'Body Planes',           questions: 21, free: false, status: 'unattempted' },
@@ -229,11 +232,19 @@ export const COHORT = (() => {
 
 // Only first attempts enter the cohort, and a student's position is her first
 // attempt's score — so the percentile reads the same on every attempt (§4.27).
-export function computePercentile(firstAttemptAccuracy) {
-  if (COHORT.size < SERVER_CONFIG.percentileMinCohort) return null
-  const below = COHORT.scores.filter(s => s < firstAttemptAccuracy).length
-  return Math.round((below / COHORT.scores.length) * 100)
+// `cohortSize` is per block — the number of students who have made a FIRST
+// attempt at it. Below the 50-student floor the percentile is not rendered and
+// the stats row reflows (§4.27); the same floor gates the option distribution
+// percentages on the question card (§4.12).
+export function computePercentile(firstAttemptAccuracy, cohortSize = COHORT.size) {
+  if (cohortSize < SERVER_CONFIG.percentileMinCohort) return null
+  const pool = COHORT.scores.slice(0, cohortSize)
+  const below = pool.filter(s => s < firstAttemptAccuracy).length
+  return Math.round((below / pool.length) * 100)
 }
+
+export const blockCohort = (blockId) =>
+  BLOCKS.find(b => b.id === blockId)?.cohortSize ?? COHORT.size
 
 // ── Accuracy bands (§4.26) ──────────────────────────────────────────────────
 export function accuracyBand(acc) {

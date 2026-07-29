@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { SERVER_CONFIG, COHORT, catById, CATEGORIES } from './data'
+import { SERVER_CONFIG, catById, CATEGORIES } from './data'
 import {
   Share, Sound, Spark, Bulb, Chevron, Copy, Book, Film, Bookmark,
   Play, Close, ZoomIn, ZoomOut, Clock,
 } from './icons'
 
-// The 50-student floor gates the option distribution percentages (§4.12/§4.27).
-const showDistribution = COHORT.size >= SERVER_CONFIG.percentileMinCohort
+// The same 50-student floor that gates the percentile also gates the option
+// distribution percentages; below it the options render without them (§4.12).
+const showsDistribution = (cohortSize) => cohortSize >= SERVER_CONFIG.percentileMinCohort
 
 // Renders **bold** and marks glossary terms. Glossary terms are content-managed
 // (§M11) — here, any key of q.glossary found in the copy becomes tappable.
@@ -47,7 +48,8 @@ export function PyqTags({ tags }) {
   )
 }
 
-export function Options({ q, picked, reveal, onPick, disabled }) {
+export function Options({ q, picked, reveal, onPick, disabled, cohortSize }) {
+  const withPct = showsDistribution(cohortSize)
   return q.options.map(o => {
     let cls = ''
     if (reveal) {
@@ -60,7 +62,7 @@ export function Options({ q, picked, reveal, onPick, disabled }) {
       <button key={o.id} className={`e6-opt${cls}`} disabled={disabled} onClick={() => !disabled && onPick(o.id)}>
         <span className="k">{o.id}</span>
         <span className="tx">{o.text}</span>
-        {reveal && showDistribution && <span className="pc">{o.pct}%</span>}
+        {reveal && withPct && <span className="pc">{o.pct}%</span>}
       </button>
     )
   })

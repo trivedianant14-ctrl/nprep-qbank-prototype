@@ -42,7 +42,19 @@ export default function QBank({ onTab }) {
   const recategorise = (qId, category) =>
     setRevision(list => list.map(r => (r.qId === qId ? { ...r, category, source: 'manual' } : r)))
 
-  const openBlock = (id) => { setBlockId(id); setScreen('pre') }
+  // A paused block goes straight back into the attempt — the mode was locked
+  // when it started and can only be set on the pre-attempt screen (§4.10).
+  const openBlock = (id) => {
+    if (resume?.blockId === id) { resumeAttempt(); return }
+    setBlockId(id)
+    setScreen('pre')
+  }
+
+  const resumeAttempt = () => {
+    setBlockId(resume.blockId)
+    setSession({ ...resume.session, restore: resume.snapshot })
+    setScreen('attempt')
+  }
 
   const start = ({ blockId: bid, showAnswers, lang }, opts = {}) => {
     setBlockId(bid)
@@ -86,17 +98,21 @@ export default function QBank({ onTab }) {
       ...b,
       [blockId]: { status: 'completed', accuracy: attempts.length ? attempts[0].accuracy : accuracy },
     }))
-    setResume(null)
+    // Only the block just finished stops being resumable — a pause on any
+    // other block survives (§4.14).
+    setResume(r => (r?.blockId === blockId ? null : r))
     setSession(null)
     setScreen('result')
   }
 
   // §4.24 — exiting a first attempt saves it as paused; exiting a reattempt
   // discards it entirely and leaves the block's Completed treatment intact.
-  const exitAttempt = ({ attempted }) => {
+  const exitAttempt = ({ attempted, snapshot }) => {
     if (!session?.isReattempt) {
       setBlocks(b => ({ ...b, [blockId]: { status: 'paused', attempted } }))
-      setResume({ blockId, attempted })
+      // Keep the whole snapshot so the question she left resumes at its exact
+      // remaining second, in the mode and at the time-per-question she set.
+      setResume({ blockId, attempted, session, snapshot })
     }
     setSession(null)
     setScreen('blocks')

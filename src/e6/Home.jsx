@@ -45,7 +45,7 @@ export default function Home({ go, progress, openBlock, onTab }) {
                 <div className="e6-bar" style={{ margin: '10px 0 14px' }}>
                   <i style={{ width: `${(resume.attempted / (heroBlock?.questions || 60)) * 100}%` }} />
                 </div>
-                <button className="e6-btn e6-btn-blue" onClick={() => openBlock(heroBlock.id, true)}>Continue</button>
+                <button className="e6-btn e6-btn-blue" onClick={() => openBlock(heroBlock.id)}>Continue</button>
               </>
             ) : (
               <>

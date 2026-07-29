@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { BLOCKS, CHAPTERS, CHAPTER_INDEX, STUDY_PLAN } from './data'
 import { Search, Index, Back, Chevron, Close, Check, Play } from './icons'
 
@@ -6,6 +6,8 @@ import { Search, Index, Back, Chevron, Close, Check, Play } from './icons'
 export default function BlockList({ go, openBlock, progress, isFree }) {
   const [filter, setFilter] = useState('all')
   const [sheet, setSheet] = useState(null)   // 'index' | 'plan'
+  const [paywall, setPaywall] = useState(false)
+  const chapterRefs = useRef({})
 
   const filters = isFree
     ? ['all', 'free', 'attempted', 'unattempted', 'paused']
@@ -74,12 +76,19 @@ export default function BlockList({ go, openBlock, progress, isFree }) {
             const chDone = blocks.filter(b => b.chapterId === ch.id && b.status === 'completed').length
             const chTotal = blocks.filter(b => b.chapterId === ch.id).length
             return (
-              <div key={ch.id}>
+              <div key={ch.id} ref={el => { chapterRefs.current[ch.ordinal] = el }}>
                 <div style={{ display: 'flex', alignItems: 'center', margin: '14px 2px 8px' }}>
                   <span style={{ fontSize: 11, color: 'var(--ink2)', flex: 1 }}>{ch.name}</span>
                   <span style={{ fontSize: 11, color: 'var(--ink2)' }}>{chDone}/{chTotal}</span>
                 </div>
-                {rows.map(b => <BlockRow key={b.id} block={b} isFree={isFree} onOpen={() => openBlock(b.id)} />)}
+                {rows.map(b => (
+                  <BlockRow
+                    key={b.id} block={b} isFree={isFree}
+                    // Tapping a locked block routes to the existing paywall —
+                    // no new upgrade surface is required (§4.6).
+                    onOpen={(locked) => (locked ? setPaywall(true) : openBlock(b.id))}
+                  />
+                ))}
               </div>
             )
           })}
@@ -91,9 +100,41 @@ export default function BlockList({ go, openBlock, progress, isFree }) {
         </div>
       </div>
 
-      {sheet === 'index' && <ChapterIndexSheet onClose={() => setSheet(null)} />}
-      {sheet === 'plan'  && <StudyPlanSheet   onClose={() => setSheet(null)} />}
+      {sheet === 'index' && (
+        <ChapterIndexSheet
+          onClose={() => setSheet(null)}
+          onPick={(ordinal) => {
+            setSheet(null)
+            chapterRefs.current[ordinal]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        />
+      )}
+      {sheet === 'plan' && <StudyPlanSheet onClose={() => setSheet(null)} />}
+      {paywall && <Paywall onClose={() => setPaywall(false)} />}
     </>
+  )
+}
+
+// §4.6 — locked blocks route to the paywall that already exists in the app.
+// This stands in for it; no new upgrade surface is specified.
+function Paywall({ onClose }) {
+  return (
+    <div className="e6-scrim" onClick={onClose}>
+      <div className="e6-sheet" onClick={e => e.stopPropagation()}>
+        <span className="e6-grip" />
+        <div style={{ padding: '22px 24px 26px', textAlign: 'center' }}>
+          <span style={{ fontSize: 34 }}>🔒</span>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 12 }}>This block is part of NPrep Pro</h3>
+          <p style={{ fontSize: 11.5, color: 'var(--ink2)', lineHeight: 1.55, margin: '9px 0 20px' }}>
+            Unlock all {BLOCKS.length}+ blocks in Edition 6, every solution, and the full Revision List.
+          </p>
+          <button className="e6-btn e6-btn-blue">Upgrade to Pro</button>
+          <button style={{ marginTop: 14, color: 'var(--ink2)', fontSize: 12.5, fontWeight: 600 }} onClick={onClose}>
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -109,7 +150,7 @@ function BlockRow({ block, isFree, onOpen }) {
     <button
       className={`e6-card e6-row e6-blockrow${done ? ' done' : ''}`}
       style={{ width: '100%', marginBottom: 8, textAlign: 'left', padding: '11px 13px' }}
-      onClick={onOpen}
+      onClick={() => onOpen(locked)}
     >
       <span style={{ fontSize: 16, flexShrink: 0 }}>📄</span>
       <span style={{ flex: 1, minWidth: 0 }}>
@@ -132,15 +173,16 @@ function BlockRow({ block, isFree, onOpen }) {
 }
 
 // §4.7 — Chapter Index bottom sheet.
-function ChapterIndexSheet({ onClose }) {
+function ChapterIndexSheet({ onClose, onPick }) {
   return (
     <div className="e6-scrim" onClick={onClose}>
       <div className="e6-sheet" onClick={e => e.stopPropagation()}>
         <span className="e6-grip" />
         <div className="e6-sheet-head"><h3>Chapter Index</h3><button onClick={onClose}><Close s={17} /></button></div>
         <div className="e6-sheet-body">
+          {/* Tapping a row scrolls the listing to that chapter (§4.7). */}
           {CHAPTER_INDEX.map((c, i) => (
-            <button key={c} onClick={onClose}
+            <button key={c} onClick={() => onPick((i % CHAPTERS.length) + 1)}
               style={{ display: 'flex', gap: 14, width: '100%', textAlign: 'left', padding: '13px 2px', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
               <span style={{ color: 'var(--ink3)', width: 12 }}>{i + 1}</span>
               <span style={{ fontWeight: 600 }}>{c}</span>

@@ -110,9 +110,7 @@ export function Overview({ blockName, questions, statusOf, showAnswers, onSettin
             <div>
               {questions.map((q, i) => (
                 <div key={q.id} style={{ display: 'flex', gap: 11, alignItems: 'flex-start', marginBottom: 11 }}>
-                  <span className="e6-pchip" style={{ flexShrink: 0 }} data-x>
-                    <span className={`e6-pchip ${normalise(statusOf(q.id), showAnswers)}`} style={{ width: 26, height: 26 }}>{i + 1}</span>
-                  </span>
+                  <span className={`e6-pchip ${normalise(statusOf(q.id), showAnswers)}`}>{i + 1}</span>
                   <span style={{ fontSize: 11, color: 'var(--ink2)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {q.text}
                   </span>

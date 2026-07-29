@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   BLOCKS, STUDENT, LEARNING_CARD, NEXT_QBANK, PEER,
-  accuracyBand, computePercentile, peerMessage, catById,
+  accuracyBand, computePercentile, blockCohort, peerMessage, catById,
 } from './data'
 import {
   Back, Chart, Percent, CheckCircle, XCircle, Chevron, Refresh, ArrowR,
@@ -23,7 +23,7 @@ export default function Result({ attempts, attemptIdx, setAttemptIdx, go, onReat
   const band = accuracyBand(acc)
   // Only first attempts enter the cohort, and position is the first attempt's
   // score — so the percentile reads the same on every attempt (§4.27).
-  const percentile = computePercentile(first.accuracy)
+  const percentile = computePercentile(first.accuracy, blockCohort(attempt.blockId))
 
   if (report) {
     return <DetailedReport attempt={attempt} percentile={percentile} onBack={() => setReport(false)} onNext={() => go('home')} />
@@ -391,7 +391,7 @@ function Solutions({ attempt, revision, uncapture, recategorise, toast }) {
           <button style={{ color: 'var(--blue)' }}><Share /></button>
         </div>
         <div className="e6-stem">{q.text}</div>
-        <Options q={q} picked={picked} reveal onPick={() => {}} disabled />
+        <Options q={q} picked={picked} reveal onPick={() => {}} disabled cohortSize={blockCohort(attempt.blockId)} />
         {picked && <Verdict q={q} picked={picked} />}
         {missed && <div className="e6-timeout">⏱ Oops you ran out of time.</div>}
         {saved && (

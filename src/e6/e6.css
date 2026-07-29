@@ -353,8 +353,8 @@
 
 .e6-ctacard { margin: 12px 14px 0; background: #fff; border-radius: var(--r-lg); padding: 12px; box-shadow: 0 1px 3px rgba(16,24,40,.05); }
 .e6-ctacard .top { display: flex; align-items: center; gap: 11px; margin-bottom: 11px; }
-.e6-ctacard .top .nm { font-size: 13px; font-weight: 700; line-height: 1.3; }
-.e6-ctacard .top .mt { font-size: 11px; color: var(--ink2); margin-top: 2px; }
+.e6-ctacard .top .nm { display: block; font-size: 13px; font-weight: 700; line-height: 1.3; }
+.e6-ctacard .top .mt { display: block; font-size: 11px; color: var(--ink2); margin-top: 2px; }
 
 .e6-resfoot { flex-shrink: 0; display: flex; align-items: center; background: #fff; border-top: 1px solid var(--line); }
 .e6-resfoot button { flex: 1; padding: 14px; font-size: 13px; font-weight: 600; color: var(--blue); display: flex; align-items: center; justify-content: center; gap: 7px; }

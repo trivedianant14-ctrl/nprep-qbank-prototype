@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { QUESTIONS, BLOCKS, SERVER_CONFIG, catById } from './data'
+import { QUESTIONS, BLOCKS, SERVER_CONFIG, blockCohort, catById } from './data'
 import {
   Close, Clock, Settings, Grid9, Share, Bookmark, Back, Chevron,
 } from './icons'
@@ -29,20 +29,26 @@ export default function Attempt({
   const questions = questionIds.map(id => QUESTIONS.find(q => q.id === id))
   const palette = (paletteIds || questionIds).map(id => QUESTIONS.find(q => q.id === id))
 
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [viewIdx, setViewIdx] = useState(0)
-  const [answers, setAnswers] = useState({})          // qId -> { choice, seconds, guess }
-  const [missed, setMissed] = useState({})            // qId -> true
-  const [timePerQ, setTimePerQ] = useState(45)        // §4.21 default
-  const [fontSize, setFontSize] = useState('Medium')
-  const [remaining, setRemaining] = useState({})      // qId -> seconds left
+  // A paused attempt resumes exactly where it left off: same answers, same
+  // remaining time on the question she left, same time-per-question and font
+  // size. Show Answers mode travels on the session itself (§4.14).
+  const restore = session.restore
+
+  const [activeIdx, setActiveIdx] = useState(restore?.activeIdx ?? 0)
+  const [viewIdx, setViewIdx] = useState(restore?.activeIdx ?? 0)
+  const [answers, setAnswers] = useState(restore?.answers ?? {})   // qId -> { choice, seconds, guess }
+  const [missed, setMissed] = useState(restore?.missed ?? {})      // qId -> true
+  const [timePerQ, setTimePerQ] = useState(restore?.timePerQ ?? 45) // §4.21 default
+  const [fontSize, setFontSize] = useState(restore?.fontSize ?? 'Medium')
+  const [remaining, setRemaining] = useState(restore?.remaining ?? {})  // qId -> seconds left
   const [sheet, setSheet] = useState(null)            // 'settings' | 'overview' | 'exit'
   const [zoom, setZoom] = useState(false)
+  const [confirmSubmit, setConfirmSubmit] = useState(false)
 
   // A time-per-question change applies from the NEXT question onward (§4.21),
   // so the value in force is captured when a question is first shown.
-  const pendingTime = useRef(45)
-  const elapsedRef = useRef({})                        // qId -> seconds on screen
+  const pendingTime = useRef(restore?.timePerQ ?? 45)
+  const elapsedRef = useRef(restore?.elapsed ?? {})          // qId -> seconds on screen
 
   const q = questions[viewIdx]
   const revisiting = viewIdx !== activeIdx
@@ -134,7 +140,7 @@ export default function Attempt({
   function next() {
     // From a revisited question, Next returns to the one she left (§4.14 r6).
     if (revisiting) { setViewIdx(activeIdx); return }
-    if (last) { submit(); return }
+    if (last) { setConfirmSubmit(true); return }
     pendingTime.current = timePerQ
     setActiveIdx(i => i + 1)
     setViewIdx(i => i + 1)
@@ -244,6 +250,7 @@ export default function Attempt({
           reveal={reveal}
           onPick={pick}
           disabled={isMissed || (showAnswers && (!!answer || revisiting))}
+          cohortSize={blockCohort(blockId)}
         />
 
         {/* Clear Choice: OFF mode only, and available on revisited questions
@@ -314,10 +321,40 @@ export default function Attempt({
         <ExitGuard
           isReattempt={isReattempt}
           onStay={() => setSheet(null)}
-          onExit={() => onExit({ answers, missed, questions, attempted: Object.keys(answers).length })}
+          onExit={() => onExit({
+            attempted: Object.keys(answers).length + Object.keys(missed).length,
+            // Everything needed to resume at the exact remaining second.
+            snapshot: { answers, missed, remaining, activeIdx, timePerQ, fontSize, elapsed: elapsedRef.current },
+          })}
         />
       )}
+      {confirmSubmit && (
+        <SubmitConfirm onCancel={() => setConfirmSubmit(false)} onSubmit={submit} />
+      )}
       {zoom && <ImageZoom onClose={() => setZoom(false)} />}
+    </div>
+  )
+}
+
+// Copy authored on the submission screen in the design file. The PRD (§4.14)
+// only says Finish is an explicit tap; this makes the tap doubly explicit,
+// which matters most in Show Answers OFF where nothing has been revealed yet.
+function SubmitConfirm({ onCancel, onSubmit }) {
+  return (
+    <div className="e6-scrim" onClick={onCancel}>
+      <div className="e6-sheet" onClick={e => e.stopPropagation()}>
+        <span className="e6-grip" />
+        <div style={{ padding: '22px 24px 26px', textAlign: 'center' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700 }}>Are you sure you want to submit?</h3>
+          <p style={{ fontSize: 11.5, color: 'var(--ink2)', lineHeight: 1.55, margin: '9px 0 20px' }}>
+            Once you submit test you can see test result and your report with solution
+          </p>
+          <button className="e6-btn e6-btn-navy" onClick={onSubmit}>Submit</button>
+          <button style={{ marginTop: 14, color: 'var(--blue)', fontSize: 12.5, fontWeight: 600 }} onClick={onCancel}>
+            Back to Questions
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
