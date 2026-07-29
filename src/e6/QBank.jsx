@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './e6.css'
 import { QUESTIONS, BLOCKS } from './data'
+import VariantSwitcher from './VariantSwitcher'
 import Home from './Home'
 import BlockList from './BlockList'
 import PreAttempt from './PreAttempt'
@@ -12,10 +13,37 @@ import { ReattemptSheet } from './Overlays'
 // The block the prototype fully authors. Its 15 questions back every attempt.
 const ALL_QIDS = QUESTIONS.map(q => q.id)
 
+// The per-student state an "existing user" arrives with. A "new user" starts
+// from nothing, which is what separates Home §4.1 from §4.2.
+const EXISTING_STATE = {
+  blocks: {
+    2: { status: 'completed', accuracy: 72 },
+    3: { status: 'completed', accuracy: 72 },
+    5: { status: 'paused', attempted: 10 },
+  },
+  revision: [
+    { qId: 1, category: 'wrong',     source: 'auto',   ts: Date.now() - 1 * 86400000 },
+    { qId: 2, category: 'wrong',     source: 'auto',   ts: Date.now() - 2 * 86400000 },
+    { qId: 3, category: 'revision',  source: 'manual', ts: Date.now() - 3 * 86400000 },
+    { qId: 4, category: 'important', source: 'manual', ts: Date.now() - 3 * 86400000 },
+    { qId: 5, category: 'guess',     source: 'auto',   ts: Date.now() - 1 * 86400000 },
+    { qId: 6, category: 'timeout',   source: 'auto',   ts: Date.now() - 4 * 86400000 },
+  ],
+}
+
+const seedFor = (userType) =>
+  userType === 'existing'
+    ? { blocks: { ...EXISTING_STATE.blocks }, revision: [...EXISTING_STATE.revision] }
+    : { blocks: {}, revision: [] }
+
 export default function QBank({ onTab }) {
   const [screen, setScreen] = useState('home')
   const [blockId, setBlockId] = useState(1)
   const [session, setSession] = useState(null)
+
+  // Prototype variants — see VariantSwitcher.
+  const [plan, setPlanState] = useState('free')
+  const [userType, setUserTypeState] = useState('new')
 
   // Per-student state, all in-memory for the prototype.
   const [blocks, setBlocks] = useState({})        // blockId -> { status, accuracy, attempted }
@@ -32,6 +60,25 @@ export default function QBank({ onTab }) {
     setTimeout(() => setToastMsg(null), 2200)
   }
 
+  // Switching a variant resets progress to that state — otherwise a new user
+  // would inherit the completed blocks of the existing one.
+  const applySeed = (nextUserType) => {
+    const seed = seedFor(nextUserType)
+    setBlocks(seed.blocks)
+    setRevision(seed.revision)
+    // A seeded pause has no snapshot behind it — Continue routes through
+    // pre-attempt so the student sets the mode, rather than resuming mid-block.
+    const paused = Object.entries(seed.blocks).find(([, b]) => b.status === 'paused')
+    setResume(paused ? { blockId: Number(paused[0]), attempted: paused[1].attempted } : null)
+    setAttempts([])
+    setAttemptIdx(0)
+    setSession(null)
+    setCoachSeen(nextUserType === 'existing')  // an existing user has seen it
+    setScreen('home')
+  }
+  const setUserType = (v) => { setUserTypeState(v); applySeed(v) }
+  const setPlan = (v) => { setPlanState(v); applySeed(userType) }
+
   // §4.16 — a question is captured automatically only once. Later triggers
   // never re-categorise, duplicate, overwrite a manual change, or reset the
   // timestamp, which always reflects when the item was first saved.
@@ -45,7 +92,7 @@ export default function QBank({ onTab }) {
   // A paused block goes straight back into the attempt — the mode was locked
   // when it started and can only be set on the pre-attempt screen (§4.10).
   const openBlock = (id) => {
-    if (resume?.blockId === id) { resumeAttempt(); return }
+    if (resume?.blockId === id && resume.snapshot) { resumeAttempt(); return }
     setBlockId(id)
     setScreen('pre')
   }
@@ -135,12 +182,18 @@ export default function QBank({ onTab }) {
         attempts[attemptIdx].missed[q.id] || attempts[attemptIdx].answers[q.id]?.choice !== q.correct).length
     : 0
 
-  const progress = { blocks, resume, saved: revision, completedBlocks: Object.keys(blocks) }
+  const progress = {
+    blocks, resume, saved: revision,
+    completedBlocks: Object.keys(blocks).filter(id => blocks[id].status === 'completed'),
+    userType,
+  }
 
   return (
     <div className="e6">
       {screen === 'home' && <Home go={setScreen} progress={progress} openBlock={openBlock} onTab={onTab} />}
-      {screen === 'blocks' && <BlockList go={setScreen} openBlock={openBlock} progress={progress} isFree />}
+      {screen === 'blocks' && (
+        <BlockList go={setScreen} openBlock={openBlock} progress={progress} isFree={plan === 'free'} />
+      )}
       {screen === 'pre' && (
         <PreAttempt blockId={blockId} go={setScreen} start={start}
           coachSeen={coachSeen} dismissCoach={() => setCoachSeen(true)} />
@@ -166,6 +219,8 @@ export default function QBank({ onTab }) {
       )}
 
       {toastMsg && <div className="e6-toast">✓ {toastMsg}</div>}
+
+      <VariantSwitcher plan={plan} setPlan={setPlan} userType={userType} setUserType={setUserType} />
     </div>
   )
 }

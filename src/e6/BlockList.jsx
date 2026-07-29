@@ -13,12 +13,13 @@ export default function BlockList({ go, openBlock, progress, isFree }) {
     ? ['all', 'free', 'attempted', 'unattempted', 'paused']
     : ['all', 'attempted', 'unattempted', 'paused']
 
-  // Per-student state is layered over the authored block list, so a block the
-  // student has completed in this session reads Completed here too.
+  // The authored block list carries no per-student state — that is layered on
+  // top, so a block completed in this session reads Completed here too.
   const blocks = BLOCKS.map(b => {
     const rec = progress.blocks[b.id]
-    if (!rec) return b
-    return { ...b, status: rec.status, accuracy: rec.accuracy, attempted: rec.attempted }
+    const base = { ...b, status: 'unattempted', accuracy: undefined, attempted: undefined }
+    if (!rec) return base
+    return { ...base, status: rec.status, accuracy: rec.accuracy, attempted: rec.attempted }
   })
 
   const match = (b) => {

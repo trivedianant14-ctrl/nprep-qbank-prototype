@@ -21,7 +21,9 @@ export default function Home({ go, progress, openBlock, onTab }) {
     : BLOCKS.find(b => b.chapterId === CHAPTERS[0].id)
 
   const savedCount = progress.saved.length
-  const returning = progress.completedBlocks.length > 0 || !!resume
+  // §4.2 — subject rows gain progress and accuracy once the student has any
+  // history, whether seeded (existing user) or earned in this session.
+  const returning = progress.userType === 'existing' || progress.completedBlocks.length > 0 || !!resume
 
   return (
     <>

@@ -8,6 +8,7 @@ import {
   Trophy, Share, Bookmark, Grid9,
 } from './icons'
 import { PyqTags, Options, Verdict, SaveCard, Explanation, ImageZoom } from './QuestionBody'
+import { useCountUp, useMounted } from './motion'
 
 // §4.25 – §4.30 — results surface: Overview / Solutions tabs plus the
 // Detailed Report reached from the bar-chart icon.
@@ -115,17 +116,26 @@ export default function Result({ attempts, attemptIdx, setAttemptIdx, go, onReat
   )
 }
 
+// The accuracy ring is the moment the student is waiting for, so it earns the
+// most motion on the screen: the arc sweeps to its value while the number
+// counts up in step with it.
 function Ring({ value, color }) {
   const R = 46, C = 2 * Math.PI * R
+  const shown = useCountUp(value)
+  const swept = useMounted()
+
   return (
     <div className="e6-ring">
       <svg width="120" height="120" viewBox="0 0 120 120">
         <circle cx="60" cy="60" r={R} fill="none" stroke="#E4E9F2" strokeWidth="11" />
-        <circle cx="60" cy="60" r={R} fill="none" stroke={color} strokeWidth="11" strokeLinecap="round"
-          strokeDasharray={`${(value / 100) * C} ${C}`} />
+        <circle
+          className="e6-ring-arc"
+          cx="60" cy="60" r={R} fill="none" stroke={color} strokeWidth="11" strokeLinecap="round"
+          strokeDasharray={`${(swept ? value / 100 : 0) * C} ${C}`}
+        />
       </svg>
       <span className="mid">
-        <span className="v">{value}%</span>
+        <span className="v">{shown}%</span>
         <span className="l">Accuracy</span>
       </span>
     </div>
@@ -169,7 +179,9 @@ function DetailedReport({ attempt, percentile, onBack, onNext }) {
   const total = attempt.total
   const { correct, incorrect, missedCount } = attempt
   const C = 2 * Math.PI * 52
-  const seg = (n) => (n / total) * C
+  const drawn = useMounted(120)
+  // Each slice grows from nothing, in order, so the split reads as it builds.
+  const seg = (n) => (drawn ? n / total : 0) * C
 
   return (
     <>
@@ -194,11 +206,11 @@ function DetailedReport({ attempt, percentile, onBack, onNext }) {
           <div style={{ display: 'grid', placeItems: 'center', position: 'relative', padding: '6px 0' }}>
             <svg width="150" height="150" viewBox="0 0 130 130">
               <g transform="rotate(-90 65 65)">
-                <circle cx="65" cy="65" r="52" fill="none" stroke="#2CC491" strokeWidth="24" strokeDasharray={`${seg(correct)} ${C}`} />
-                <circle cx="65" cy="65" r="52" fill="none" stroke="#F26B6B" strokeWidth="24" strokeDasharray={`${seg(incorrect)} ${C}`} strokeDashoffset={-seg(correct)} />
+                <circle className="e6-slice" cx="65" cy="65" r="52" fill="none" stroke="#2CC491" strokeWidth="24" strokeDasharray={`${seg(correct)} ${C}`} />
+                <circle className="e6-slice" cx="65" cy="65" r="52" fill="none" stroke="#F26B6B" strokeWidth="24" strokeDasharray={`${seg(incorrect)} ${C}`} strokeDashoffset={-seg(correct)} />
                 {/* The Missed slice renders only when she ran out of time. */}
                 {missedCount > 0 && (
-                  <circle cx="65" cy="65" r="52" fill="none" stroke="#FFB44C" strokeWidth="24" strokeDasharray={`${seg(missedCount)} ${C}`} strokeDashoffset={-(seg(correct) + seg(incorrect))} />
+                  <circle className="e6-slice" cx="65" cy="65" r="52" fill="none" stroke="#FFB44C" strokeWidth="24" strokeDasharray={`${seg(missedCount)} ${C}`} strokeDashoffset={-(seg(correct) + seg(incorrect))} />
                 )}
               </g>
             </svg>
@@ -266,10 +278,13 @@ function Cell({ label, n, pct, color }) {
 }
 
 function TimeBar({ label, value, pct, color, muted }) {
+  const grown = useMounted(200)
   return (
     <div className="e6-timebar">
       <div className="r"><span>{label}</span><span style={{ color: muted ? 'var(--ink3)' : 'var(--ink)' }}>{value}</span></div>
-      <div className="e6-bar" style={{ background: '#EDF0F6' }}><i style={{ width: `${pct}%`, background: color }} /></div>
+      <div className="e6-bar" style={{ background: '#EDF0F6' }}>
+        <i className="e6-bar-fill" style={{ width: `${grown ? pct : 0}%`, background: color }} />
+      </div>
     </div>
   )
 }
@@ -286,13 +301,13 @@ function PeerCurve({ percentile }) {
         {[[100, 8], [80, 34], [40, 62], [0, 88]].map(([label, y]) => (
           <text key={label} x="0" y={y} fontSize="7" fill="#98A2B3">{label}%</text>
         ))}
-        <path d="M20 74 C60 72 76 62 96 58 C122 52 140 44 168 34 C196 24 216 16 244 10"
+        <path className="e6-curve-line" d="M20 74 C60 72 76 62 96 58 C122 52 140 44 168 34 C196 24 216 16 244 10"
           fill="none" stroke="#4FA8FF" strokeWidth="2.4" strokeLinecap="round" />
         <path d="M20 74 C60 72 76 62 96 58 C122 52 140 44 168 34 C196 24 216 16 244 10 L244 88 L20 88Z"
           fill="url(#pg)" opacity=".16" />
         <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#008DFF" /><stop offset="1" stopColor="#008DFF" stopOpacity="0" /></linearGradient></defs>
         <line x1={x} y1="10" x2={x} y2="88" stroke="#BFD9F5" strokeWidth="1" />
-        <circle cx={x} cy={78 - (percentile / 100) * 66} r="4.5" fill="#008DFF" stroke="#fff" strokeWidth="2" />
+        <circle className="e6-curve-dot" cx={x} cy={78 - (percentile / 100) * 66} r="4.5" fill="#008DFF" stroke="#fff" strokeWidth="2" />
         <line x1="168" y1="20" x2="168" y2="88" stroke="#E2E8F2" strokeWidth="1" />
         <line x1="228" y1="14" x2="228" y2="88" stroke="#E2E8F2" strokeWidth="1" />
         <text x="168" y="80" fontSize="6.5" fill="#5F6B7C" textAnchor="middle" fontWeight="600">{PEER.average}%</text>

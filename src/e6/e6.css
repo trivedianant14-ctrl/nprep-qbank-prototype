@@ -462,3 +462,110 @@
 /* Peer curve */
 .e6-curve { position: relative; }
 .e6-curve .you { position: absolute; background: #14161C; color: #fff; font-size: 9px; font-weight: 600; padding: 3px 7px; border-radius: 5px; transform: translateX(-50%); white-space: nowrap; }
+
+/* ═══ MOTION ═════════════════════════════════════════════════════════════
+   Applied where it carries meaning: results building themselves in front of
+   the student, and state changes during an attempt. Everything here collapses
+   to its end state under prefers-reduced-motion (see the block at the end).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Accuracy ring — the headline moment on the results screen. */
+.e6-ring-arc { transition: stroke-dasharray 1.15s cubic-bezier(.22, 1, .36, 1); }
+.e6-ring .mid .v { font-variant-numeric: tabular-nums; }
+.e6-ring { animation: e6-pop .5s cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes e6-pop {
+  from { opacity: 0; transform: scale(.86); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Donut slices grow in the order they are stacked. */
+.e6-slice { transition: stroke-dasharray 1s cubic-bezier(.22, 1, .36, 1), stroke-dashoffset 1s cubic-bezier(.22, 1, .36, 1); }
+
+/* Bars and progress fills. */
+.e6-bar-fill { transition: width .85s cubic-bezier(.22, 1, .36, 1); }
+.e6-bar > i  { transition: width .5s cubic-bezier(.22, 1, .36, 1); }
+
+/* Peer curve draws left to right, then the marker lands. */
+.e6-curve-line {
+  stroke-dasharray: 400; stroke-dashoffset: 400;
+  animation: e6-draw 1.1s cubic-bezier(.4, 0, .2, 1) .15s forwards;
+}
+@keyframes e6-draw { to { stroke-dashoffset: 0; } }
+.e6-curve-dot { animation: e6-pop .4s cubic-bezier(.34, 1.56, .64, 1) 1s both; }
+
+/* Results content settles in a short stagger under the ring. */
+.e6-greet   { animation: e6-rise .45s cubic-bezier(.22, 1, .36, 1) both; }
+.e6-stats   { animation: e6-rise .45s cubic-bezier(.22, 1, .36, 1) .12s both; }
+.e6-advisory{ animation: e6-rise .45s cubic-bezier(.22, 1, .36, 1) .2s both; }
+.e6-ctacard { animation: e6-rise .45s cubic-bezier(.22, 1, .36, 1) .28s both; }
+@keyframes e6-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Attempt engine: the reveal is the other moment worth animating. */
+.e6-verdict, .e6-savecard, .e6-guess, .e6-timeout {
+  animation: e6-rise .32s cubic-bezier(.22, 1, .36, 1) both;
+}
+.e6-expl { animation: e6-rise .32s cubic-bezier(.22, 1, .36, 1) .06s both; }
+
+/* Option state changes and palette chips ease rather than snap. */
+.e6-opt   { transition: background .22s ease, border-color .22s ease; }
+.e6-pchip { transition: background .28s ease, color .28s ease, border-color .28s ease; }
+.e6-opt:active { transform: scale(.99); }
+
+/* Detailed-report panels fade up as the section is reached. */
+.e6-tile { animation: e6-rise .4s cubic-bezier(.22, 1, .36, 1) both; }
+.e6-tile:nth-child(2) { animation-delay: .06s; }
+.e6-tile:nth-child(3) { animation-delay: .12s; }
+.e6-tile:nth-child(4) { animation-delay: .18s; }
+
+/* ═══ PROTOTYPE VARIANT SWITCHER ═════════════════════════════════════════
+   Not part of the Edition 6 design — a demo affordance, deliberately styled
+   to read as tooling rather than product.
+   ═══════════════════════════════════════════════════════════════════════ */
+.e6-vs-fab {
+  position: fixed; right: 16px; bottom: 16px; z-index: 100;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #2C3038; color: #fff;
+  display: grid; place-items: center;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, .3);
+}
+.e6-vs {
+  position: fixed; right: 16px; bottom: 64px; z-index: 100;
+  width: 232px; padding: 14px;
+  background: #2C3038; color: #fff; border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(16, 24, 40, .34);
+  opacity: 0; pointer-events: none; transform: translateY(8px) scale(.97);
+  transition: opacity .2s ease, transform .2s cubic-bezier(.22, 1, .36, 1);
+}
+.e6-vs.open { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+.e6-vs-head { display: flex; align-items: center; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #A8AEBB; margin-bottom: 12px; }
+.e6-vs-head span { flex: 1; }
+.e6-vs-head button { color: #A8AEBB; display: grid; place-items: center; }
+.e6-vs-group { margin-bottom: 14px; }
+.e6-vs-label { font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+.e6-vs-seg { display: flex; background: #3B4049; border-radius: 9px; padding: 3px; gap: 3px; }
+.e6-vs-seg button { flex: 1; padding: 6px 4px; border-radius: 7px; font-size: 11px; color: #C6CBD4; }
+.e6-vs-seg button.on { background: #fff; color: #1B1E24; font-weight: 600; }
+.e6-vs-hint { font-size: 9.5px; line-height: 1.45; color: #8E95A3; margin-top: 6px; }
+.e6-vs-note { font-size: 9.5px; line-height: 1.45; color: #8E95A3; border-top: 1px solid #3B4049; padding-top: 10px; }
+
+/* On a wide screen the switcher docks outside the phone so it never covers
+   the design being reviewed. */
+@media (min-width: 900px) {
+  .e6-vs-fab { display: none; }
+  .e6-vs {
+    right: auto; left: 24px; bottom: auto; top: 24px;
+    opacity: 1; pointer-events: auto; transform: none;
+  }
+  .e6-vs-head button { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .e6 *, .e6 *::before, .e6 *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: .01ms !important;
+  }
+}
